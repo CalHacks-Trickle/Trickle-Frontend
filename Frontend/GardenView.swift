@@ -29,10 +29,12 @@ struct GardenView: View {
             }
         }
         .onAppear {
+            print("🌳 GardenView appeared - starting app monitoring")
             // Start monitoring when view appears
             appMonitor.startMonitoring()
         }
         .onDisappear {
+            print("👋 GardenView disappeared - stopping app monitoring")
             // Stop monitoring when view disappears
             appMonitor.stopMonitoring()
         }
@@ -52,54 +54,69 @@ struct GardenView: View {
                     .zIndex(0)
             }
 
-            // LAYER 2: Content Overlay
-            VStack(spacing: 20) {
-                // Header: Connection Status
-                HeaderView(
-                    isConnected: webSocketManager.isConnected,
-                    currentState: webSocketManager.currentState
-                )
-
-                Spacer()
-
-                // Center: Tree Visualization
-                if let garden = webSocketManager.gardenData?.garden {
-                    TreeView(tree: garden.tree)
-                        .transition(.scale.combined(with: .opacity))
-                } else {
-                    // Loading state
-                    ProgressView("Loading your garden...")
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .foregroundColor(.white)
-                }
-
-                Spacer()
-
-                // Bottom: Stats and App Usage
-                if let data = webSocketManager.gardenData {
-                    StatsView(
-                        todaySummary: data.todaySummary,
-                        appUsage: data.appUsage
+            // LAYER 2: Content Overlay with Scroll
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Header: Connection Status
+                    HeaderView(
+                        isConnected: webSocketManager.isConnected,
+                        currentState: webSocketManager.currentState
                     )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
 
-                // Logout Button
-                Button(action: {
-                    webSocketManager.disconnect()
-                    authViewModel.logout()
-                }) {
-                    Text("Logout")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.red.opacity(0.8))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
+                    // Center: Bouncing Ball Visualization
+                    if let data = webSocketManager.gardenData {
+                        let netProductivity = TimeInterval(data.sessionSummary.totalFocusTime - data.sessionSummary.totalDistractionTime)
+
+                        BouncingBallView(netProductivity: netProductivity)
+                            .transition(.scale.combined(with: .opacity))
+                            .padding(.vertical, 40)
+                            .onChange(of: netProductivity) { oldValue, newValue in
+                                print("📊 GardenView: Net productivity changed from \(Int(oldValue))s to \(Int(newValue))s")
+                            }
+                    } else {
+                        // Loading state
+                        ProgressView("Loading your garden...")
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .foregroundColor(.white)
+                            .padding(.vertical, 40)
+                    }
+
+                    // Two-Section Stats Layout
+                    VStack(spacing: 15) {
+                        // Section 1: Frontend-Only Tracking
+                        FrontendStatsView(
+                            trackedApps: appMonitor.trackedApps,
+                            currentApp: appMonitor.currentApp
+                        )
+
+                        // Section 2: Backend Response
+                        if let data = webSocketManager.gardenData {
+                            StatsView(
+                                todaySummary: data.todaySummary,
+                                appUsage: data.appUsage
+                            )
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+
+                    // Logout Button
+                    Button(action: {
+                        webSocketManager.disconnect()
+                        authViewModel.logout()
+                    }) {
+                        Text("Logout")
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.red.opacity(0.8))
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 20)
                 }
-                .padding(.horizontal, 40)
+                .padding()
             }
-            .padding()
         }
         .animation(.easeInOut(duration: 1.5), value: webSocketManager.currentState)
     }

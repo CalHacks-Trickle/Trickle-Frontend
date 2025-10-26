@@ -9,30 +9,53 @@ import Foundation
 
 // MARK: - Garden State Response
 struct GardenStateResponse: Codable {
-    let garden: Garden
     let currentState: String  // "focusing" or "distracted"
-    let todaySummary: TodaySummary
+    let sessionSummary: SessionSummary
     let appUsage: AppUsage
+
+    // Keep backward compatibility with old property name
+    var todaySummary: SessionSummary {
+        return sessionSummary
+    }
+
+    // Optional garden field for backend compatibility (we ignore it now)
+    let garden: Garden?
+
+    // Custom decoder to make garden optional
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        currentState = try container.decode(String.self, forKey: .currentState)
+        sessionSummary = try container.decode(SessionSummary.self, forKey: .sessionSummary)
+        appUsage = try container.decode(AppUsage.self, forKey: .appUsage)
+        garden = try? container.decode(Garden.self, forKey: .garden)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case currentState, sessionSummary, appUsage, garden
+    }
 }
 
-// MARK: - Garden
+// MARK: - Garden (deprecated but kept for backend compatibility)
 struct Garden: Codable {
-    let tree: Tree
+    let tree: Tree?
 }
 
 struct Tree: Codable {
-    let level: Int
-    let health: Double
-    let progressToNextLevel: Double
+    let level: Int?
+    let health: Double?
+    let progressToNextLevel: Double?
 }
 
-// MARK: - Today Summary
-struct TodaySummary: Codable {
+// MARK: - Session Summary (renamed from TodaySummary to match backend)
+struct SessionSummary: Codable {
     let totalFocusTime: Int        // seconds
     let totalDistractionTime: Int  // seconds
     let longestFocusStreak: Int    // seconds
     let lastUpdated: String        // ISO date string
 }
+
+// Type alias for backward compatibility
+typealias TodaySummary = SessionSummary
 
 // MARK: - App Usage
 struct AppUsage: Codable {

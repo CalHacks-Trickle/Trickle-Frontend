@@ -21,6 +21,7 @@ class WebSocketManager: ObservableObject {
     private var socket: SocketIOClient?
     private let token: String
     private let serverURL = "http://20.172.68.176:3000"
+    private var updateTimer: Timer?
 
     // MARK: - Initialization
     init(token: String) {
@@ -43,7 +44,7 @@ class WebSocketManager: ObservableObject {
                 .reconnects(true),  // Auto-reconnect
                 .reconnectAttempts(-1),  // Infinite reconnect attempts
                 .reconnectWait(5),  // Wait 5 seconds between reconnects
-                .connectParams(["auth": ["token": token]]),  // Send token with "Bearer" prefix
+                .connectParams(["token": self.token]),  // Send token with "Bearer" prefix
             ]
         )
 
@@ -76,6 +77,7 @@ class WebSocketManager: ObservableObject {
             DispatchQueue.main.async {
                 self?.isConnected = true
                 self?.connectionError = nil
+                self?.startPeriodicUpdates()
             }
         }
 
@@ -93,6 +95,7 @@ class WebSocketManager: ObservableObject {
             print("🔌 Socket.IO disconnected: \(data)")
             DispatchQueue.main.async {
                 self?.isConnected = false
+                self?.stopPeriodicUpdates()
             }
         }
 
@@ -170,12 +173,14 @@ class WebSocketManager: ObservableObject {
             DispatchQueue.main.async {
                 self.gardenData = response
                 self.currentState = FocusState(rawValue: response.currentState) ?? .focusing
-                print("🌳 Garden state updated:")
+
+                let netProductivity = response.todaySummary.totalFocusTime - response.todaySummary.totalDistractionTime
+
+                print("⚽ BOUNCING BALL - Status updated:")
                 print("   - State: \(response.currentState)")
-                print("   - Tree Level: \(response.garden.tree.level)")
-                print("   - Tree Health: \(response.garden.tree.health)%")
                 print("   - Focus Time: \(response.todaySummary.totalFocusTime)s")
                 print("   - Distraction Time: \(response.todaySummary.totalDistractionTime)s")
+                print("   - Net Productivity: \(netProductivity)s \(netProductivity > 0 ? "📈" : "📉")")
             }
         } catch {
             print("❌ JSON decode error: \(error)")
@@ -186,8 +191,41 @@ class WebSocketManager: ObservableObject {
         }
     }
 
+    // MARK: - Periodic Updates
+    private func startPeriodicUpdates() {
+        // Stop existing timer if any
+        stopPeriodicUpdates()
+
+        // Request update every 5 seconds while viewing the app
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.requestStatusUpdate()
+        }
+
+        // Request initial update immediately
+        requestStatusUpdate()
+
+        print("⏰ Started periodic status updates (every 5s)")
+    }
+
+    private func stopPeriodicUpdates() {
+        updateTimer?.invalidate()
+        updateTimer = nil
+        print("⏰ Stopped periodic status updates")
+    }
+
+    private func requestStatusUpdate() {
+        guard isConnected else {
+            return
+        }
+
+        // Request fresh status from backend
+        socket?.emit("get-status")
+        print("📤 Requested status update")
+    }
+
     // MARK: - Cleanup
     deinit {
+        stopPeriodicUpdates()
         disconnect()
     }
 }

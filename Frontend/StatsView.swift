@@ -12,8 +12,37 @@ struct StatsView: View {
     let appUsage: AppUsage
     @State private var showAppDetails = false
 
+    // Detect if this is demo data
+    private var isDemoData: Bool {
+        // Check if apps match known demo data
+        let demoApps = ["Visual Studio Code", "iTerm2", "Figma", "Slack", "X"]
+        let focusAppNames = appUsage.focus.apps.map { $0.name }
+        let distractionAppNames = appUsage.distraction.apps.map { $0.name }
+
+        let allAppNames = focusAppNames + distractionAppNames
+        return allAppNames.allSatisfy { demoApps.contains($0) }
+    }
+
     var body: some View {
         VStack(spacing: 15) {
+            // Header with data source label
+            HStack {
+                Text("📊 Backend Response")
+                    .font(.headline)
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                Text(isDemoData ? "DEMO" : "ACTUAL")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(isDemoData ? Color.orange : Color.green)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+            }
+
             // Summary Cards
             HStack(spacing: 15) {
                 StatCard(

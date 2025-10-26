@@ -17,8 +17,8 @@ struct TreeView: View {
                 .font(.system(size: treeSize))
                 .shadow(color: treeShadowColor, radius: 10)
                 .scaleEffect(healthScale)
-                .animation(.spring(response: 0.8, dampingFraction: 0.6), value: tree.level)
-                .animation(.easeInOut(duration: 0.5), value: tree.health)
+                .animation(.spring(response: 0.8, dampingFraction: 0.6), value: tree.level ?? 1)
+                .animation(.easeInOut(duration: 0.5), value: tree.health ?? 100.0)
 
             // Health Bar
             VStack(spacing: 5) {
@@ -29,7 +29,7 @@ struct TreeView: View {
 
                     Spacer()
 
-                    Text("\(Int(tree.health))%")
+                    Text("\(Int(tree.health ?? 100.0))%")
                         .font(.caption)
                         .fontWeight(.bold)
                         .foregroundColor(healthColor)
@@ -52,9 +52,9 @@ struct TreeView: View {
                                     endPoint: .trailing
                                 )
                             )
-                            .frame(width: geometry.size.width * CGFloat(tree.health / 100.0), height: 12)
+                            .frame(width: geometry.size.width * CGFloat((tree.health ?? 100.0) / 100.0), height: 12)
                             .cornerRadius(6)
-                            .animation(.easeInOut(duration: 0.8), value: tree.health)
+                            .animation(.easeInOut(duration: 0.8), value: tree.health ?? 100.0)
                     }
                 }
                 .frame(height: 12)
@@ -64,13 +64,13 @@ struct TreeView: View {
             // Level Progress
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Level \(tree.level)")
+                    Text("Level \(tree.level ?? 1)")
                         .font(.headline)
                         .foregroundColor(.white)
 
                     Spacer()
 
-                    Text("Next: Level \(tree.level + 1)")
+                    Text("Next: Level \((tree.level ?? 1) + 1)")
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.8))
                 }
@@ -92,14 +92,14 @@ struct TreeView: View {
                                     endPoint: .trailing
                                 )
                             )
-                            .frame(width: geometry.size.width * CGFloat(tree.progressToNextLevel / 100.0), height: 10)
+                            .frame(width: geometry.size.width * CGFloat((tree.progressToNextLevel ?? 0.0) / 100.0), height: 10)
                             .cornerRadius(5)
-                            .animation(.easeInOut(duration: 0.8), value: tree.progressToNextLevel)
+                            .animation(.easeInOut(duration: 0.8), value: tree.progressToNextLevel ?? 0.0)
                     }
                 }
                 .frame(height: 10)
 
-                Text("\(Int(tree.progressToNextLevel))% to next level")
+                Text("\(Int(tree.progressToNextLevel ?? 0.0))% to next level")
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.7))
             }
@@ -115,7 +115,7 @@ struct TreeView: View {
     // MARK: - Computed Properties
 
     private var treeEmoji: String {
-        switch tree.level {
+        switch tree.level ?? 1 {
         case 0:
             return "🌱" // Seed
         case 1:
@@ -137,20 +137,21 @@ struct TreeView: View {
         // Base size + growth per level
         let baseSize: CGFloat = 80
         let growthPerLevel: CGFloat = 15
-        return baseSize + (CGFloat(tree.level) * growthPerLevel)
+        return baseSize + (CGFloat(tree.level ?? 1) * growthPerLevel)
     }
 
     private var healthScale: CGFloat {
         // Scale slightly based on health (0.8 - 1.0)
-        return 0.8 + (tree.health / 100.0 * 0.2)
+        return 0.8 + ((tree.health ?? 100.0) / 100.0 * 0.2)
     }
 
     private var healthColor: Color {
-        if tree.health >= 80 {
+        let health = tree.health ?? 100.0
+        if health >= 80 {
             return .green
-        } else if tree.health >= 50 {
+        } else if health >= 50 {
             return .yellow
-        } else if tree.health >= 25 {
+        } else if health >= 25 {
             return .orange
         } else {
             return .red
@@ -158,9 +159,10 @@ struct TreeView: View {
     }
 
     private var treeShadowColor: Color {
-        if tree.health >= 80 {
+        let health = tree.health ?? 100.0
+        if health >= 80 {
             return .green.opacity(0.5)
-        } else if tree.health >= 50 {
+        } else if health >= 50 {
             return .yellow.opacity(0.5)
         } else {
             return .red.opacity(0.5)
