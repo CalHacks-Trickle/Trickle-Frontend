@@ -24,7 +24,7 @@ struct SessionResponse: Codable {
     let expiresAt: String?
 
     struct UserData: Codable {
-        let id: String
+        let id: String?
         let email: String
         let name: String?
     }
@@ -83,7 +83,7 @@ class KeychainManager {
 // MARK: - Network Service
 class NetworkService {
     static let shared = NetworkService()
-    private let baseURL = "http://localhost:3000"
+    private let baseURL = "http://20.172.68.176:3000"
 
     func login(email: String, password: String) async throws -> String {
         let url = URL(string: "\(baseURL)/auth/login")!
@@ -218,7 +218,14 @@ struct ContentView: View {
     var body: some View {
         Group {
             if authViewModel.isAuthenticated {
-                HomeView(authViewModel: authViewModel)
+                if let token = KeychainManager.shared.getToken() {
+                    GardenView(webSocketManager: WebSocketManager(token: token))
+                        .environmentObject(authViewModel)
+                } else {
+                    // Fallback if token is missing
+                    Text("Error: No authentication token found")
+                        .foregroundColor(.red)
+                }
             } else {
                 LoginView(authViewModel: authViewModel)
             }
@@ -310,7 +317,10 @@ struct HomeView: View {
                             .font(.headline)
 
                         Text("Email: \(sessionData.user.email)")
-                        Text("User ID: \(sessionData.user.id)")
+
+                        if let userId = sessionData.user.id {
+                            Text("User ID: \(userId)")
+                        }
 
                         if let name = sessionData.user.name {
                             Text("Name: \(name)")
