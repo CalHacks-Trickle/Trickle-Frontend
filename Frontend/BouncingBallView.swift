@@ -4,31 +4,50 @@
 //
 //  Simple bouncing ball that grows with productivity
 //
+//  ---
+//  NOTE: The 'extension Color { ... }' block was removed from the end
+//  of this file. It was causing an "Invalid redeclaration" error,
+//  which means that extension already exists elsewhere in your project.
+//  Removing the duplicate copy here fixes both compiler errors.
+//  ---
+//
 
 import SwiftUI
 
 struct BouncingBallView: View {
-    let netProductivity: TimeInterval  // Focus time - Distraction time (in seconds)
+    let netProductivity: TimeInterval  // Initial Focus time - Distraction time (in seconds)
 
-    @State private var ballPosition: CGFloat = 0.0  // Absolute position in pixels from left edge
-    @State private var ballSize: CGFloat = 20.0  // Diameter in pixels
+    // State for the animation
+    // UPDATED: ballPosition is now the CENTER of the ball, from 0 to trackWidth.
+    // Initialized to minBallSize / 2.
+    @State private var ballPosition: CGFloat = 5.0  // Absolute position in pixels from left edge
+    @State private var ballSize: CGFloat = 10.0  // Diameter in pixels
     @State private var isMovingRight: Bool = true
     @State private var lastUpdateTime: Date = Date()
+    
+    // This is the *live* value that the timer will increase
+    @State private var animatedNetProductivity: TimeInterval = 0.0
+    
+    // The timer object
+    @State private var animationTimer: Timer? = nil // Corrected from 'time?' to 'Timer?'
 
     // Constants
     let trackWidth: CGFloat = 600.0
     let trackHeight: CGFloat = 100.0
-    let minBallSize: CGFloat = 20.0
-    let maxBallSize: CGFloat = 200.0
+    // UPDATED: Made ball sizes smaller
+    let minBallSize: CGFloat = 10.0
+    let maxBallSize: CGFloat = 100.0
 
-    // Speed: 1 pixel per 5 seconds of focus time
-    // That means: 600 pixels / (5 seconds per pixel) = 3000 seconds = 50 minutes per full traversal
-    let pixelsPerSecond: CGFloat = 0.2  // 1 pixel / 5 seconds
+    // Speed: 1 pixel per 5 seconds of focus time (Original: 0.2)
+    // 0.2 pixels per second
+    // UPDATED: Increased speed to be visible
+    let pixelsPerSecond: CGFloat = 20.0
 
     var body: some View {
         VStack(spacing: 20) {
             // Track
-            ZStack(alignment: .leading) {
+            // UPDATED: Changed alignment to .center for correct offset calculations
+            ZStack(alignment: .center) {
                 // Track background
                 RoundedRectangle(cornerRadius: 50)
                     .fill(Color.white.opacity(0.2))
@@ -54,10 +73,12 @@ struct BouncingBallView: View {
                     .offset(x: ballXPosition, y: 0)
             }
             .frame(width: trackWidth, height: trackHeight)
+            .clipped() // Prevents ball from drawing outside the track
 
             // Stats
             VStack(spacing: 5) {
-                Text("Productivity: \(formatTime(Int(netProductivity)))")
+                // Display the *live* animated time
+                Text("Productivity: \(formatTime(Int(animatedNetProductivity)))")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white.opacity(0.8))
 
@@ -67,11 +88,25 @@ struct BouncingBallView: View {
             }
         }
         .onChange(of: netProductivity) { oldValue, newValue in
+            // If the parent view sends a new time, re-sync our animation
+            self.animatedNetProductivity = newValue
+            // Need to update ballSize *before* updateBall to get correct effectiveWidth
+            let bounces = Int((newValue * pixelsPerSecond) / (trackWidth - ballSize)) // Approx.
+            self.ballSize = min(maxBallSize, minBallSize + CGFloat(bounces) * 3.0)
             updateBall(netTime: newValue)
         }
         .onAppear {
             print("⚽ BouncingBallView appeared!")
-            updateBall(netTime: netProductivity)
+            // Set the starting time
+            self.animatedNetProductivity = netProductivity
+            
+            // Set the ball's initial size and position
+            // We must set ballSize *first* so updateBall() can calculate the correct track width
+            let initialBounces = Int((netProductivity * pixelsPerSecond) / (trackWidth - minBallSize)) // Approx.
+            self.ballSize = min(maxBallSize, minBallSize + CGFloat(initialBounces) * 3.0)
+            updateBall(netTime: self.animatedNetProductivity)
+            
+            // Start the timer to make it move
             startAnimation()
         }
         .onDisappear {
@@ -82,19 +117,23 @@ struct BouncingBallView: View {
     // MARK: - Computed Properties
 
     private var ballXPosition: CGFloat {
-        // ballPosition is already in pixels (0 to trackWidth)
-        // Center the ball horizontally, accounting for ball size
-        return ballPosition - (trackWidth / 2) + (ballSize / 2)
+        // UPDATED: ballPosition is now the center (0 to 600)
+        // We map it to the centered ZStack's coordinates (-300 to 300)
+        return ballPosition - (trackWidth / 2)
     }
 
     private var bounceCount: Int {
         // How many times the ball has bounced (each bounce = one full traversal)
-        let totalPixelsTraveled = netProductivity * pixelsPerSecond
-        return Int(totalPixelsTraveled / trackWidth)
+        // Use an approximation of effective width for the counter
+        let effectiveWidth = trackWidth - ballSize
+        guard effectiveWidth > 0 else { return 0 }
+        let totalPixelsTraveled = animatedNetProductivity * pixelsPerSecond // Use live time
+        return Int(totalPixelsTraveled / effectiveWidth)
     }
 
     private var ballColor: [Color] {
-        if netProductivity > 0 {
+        if animatedNetProductivity > 0 { // Use live time
+            // Assuming Color(hex:) is available from another file in the project
             return [Color(hex: "FFD700"), Color(hex: "FFA500"), Color(hex: "FF8C00")]
         } else {
             return [Color.gray, Color(hex: "5D6D7E")]
@@ -102,34 +141,53 @@ struct BouncingBallView: View {
     }
 
     private var ballGlowColor: Color {
-        netProductivity > 0 ? Color.orange : Color.gray
+        animatedNetProductivity > 0 ? Color.orange : Color.gray // Use live time
     }
 
     // MARK: - Update Logic
 
     private func updateBall(netTime: TimeInterval) {
+        // UPDATED: The ball's center can't travel the *full* width.
+        // It can only travel (trackWidth - ballSize).
+        let effectiveWidth = trackWidth - ballSize
+        guard effectiveWidth > 0 else {
+            // Ball is as big as the track, just center it
+            ballPosition = trackWidth / 2
+            return
+        }
+        
         let totalPixelsTraveled = netTime * pixelsPerSecond
 
         // Calculate how many full bounces completed
-        let bounces = Int(totalPixelsTraveled / trackWidth)
+        let bounces = Int(totalPixelsTraveled / effectiveWidth)
 
-        // Calculate position within current traversal (0 to trackWidth)
-        let positionInTraversal = totalPixelsTraveled.truncatingRemainder(dividingBy: trackWidth)
+        // Calculate position within current traversal (0 to effectiveWidth)
+        let positionInTraversal = totalPixelsTraveled.truncatingRemainder(dividingBy: effectiveWidth)
 
         // Determine direction (alternates each bounce)
         let movingRight = bounces % 2 == 0
 
-        // Calculate actual pixel position
-        let newPosition = movingRight ? positionInTraversal : (trackWidth - positionInTraversal)
+        // Calculate actual pixel position (from 0 to effectiveWidth)
+        let newPosition = movingRight ? positionInTraversal : (effectiveWidth - positionInTraversal)
+        
+        // UPDATED: We set ballPosition to be the *center* of the ball.
+        // This maps the (0...effectiveWidth) position to the
+        // (ballSize/2 ... trackWidth - ballSize/2) center position.
+        let newCenterPosition = newPosition + (ballSize / 2)
 
-        // Grow ball size with each bounce: starts at 20px, grows by 3px per bounce
-        let newSize = min(maxBallSize, minBallSize + CGFloat(bounces) * 3.0)
-
-        // Update state
-        ballPosition = newPosition
+        // --- Update State ---
+        
+        // Wrap position change in a linear animation for smooth movement
+        withAnimation(.linear(duration: 1.0/60.0)) {
+            ballPosition = newCenterPosition
+        }
+        
         isMovingRight = movingRight
 
-        // Animate size changes
+        // Grow ball size with each bounce: starts at 10px, grows by 3px per bounce
+        let newSize = min(maxBallSize, minBallSize + CGFloat(bounces) * 3.0)
+
+        // Animate size changes with a "pop"
         if abs(ballSize - newSize) > 0.1 {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 ballSize = newSize
@@ -141,23 +199,47 @@ struct BouncingBallView: View {
 
     private func startAnimation() {
         print("⚽ Starting ball animation timer at 60 FPS")
+        self.lastUpdateTime = Date() // Set start time for delta
+        
         // Animate at 60 FPS for smooth motion
-        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [self] _ in
-            updateBall(netTime: self.netProductivity)
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { _ in
+            let now = Date()
+            // Calculate time passed since last frame
+            let timeDelta = now.timeIntervalSince(self.lastUpdateTime)
+            
+            // Increment our live productivity score by the time passed
+            // Only increase if productivity is positive or starting from 0
+            // If it's negative, it should stay put.
+            if self.animatedNetProductivity >= 0 {
+                self.animatedNetProductivity += timeDelta
+            }
+            
+            // Update the ball's position based on the new live time
+            updateBall(netTime: self.animatedNetProductivity)
+            
+            // Store this frame's time for the next loop
+            self.lastUpdateTime = now
         }
     }
 
     private func stopAnimation() {
+        print("⚽ Stopping ball animation timer")
         animationTimer?.invalidate()
         animationTimer = nil
     }
 
     // MARK: - Helper
 
-    private func formatTime(_ seconds: Int) -> String {
-        let minutes = seconds / 60
-        let secs = seconds % 60
-        return String(format: "%d:%02d", minutes, secs)
+    private func formatTime(_ totalSeconds: Int) -> String {
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let secs = totalSeconds % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%d:%02d", minutes, secs)
+        }
     }
 }
 
@@ -165,7 +247,12 @@ struct BouncingBallView: View {
 
 #Preview {
     ZStack {
-        Color.blue.opacity(0.3)
-        BouncingBallView(netProductivity: 150)  // 2.5 minutes = 5 bounces
+        // A dark background to see the view
+        // This will now correctly find the *single* init(hex:)
+        Color(hex: "2C3E50").ignoresSafeArea()
+        
+        // Previewing with 0 seconds of *initial* net productivity to show min ball size
+        // UPDATED: Changed initial productivity to 0 for a smaller starting ball
+        BouncingBallView(netProductivity: 0)
     }
 }

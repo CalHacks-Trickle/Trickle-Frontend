@@ -216,18 +216,28 @@ struct ContentView: View {
     @StateObject private var authViewModel = AuthViewModel()
 
     var body: some View {
-        Group {
-            if authViewModel.isAuthenticated {
-                if let token = KeychainManager.shared.getToken() {
-                    GardenView(webSocketManager: WebSocketManager(token: token))
-                        .environmentObject(authViewModel)
+        // UPDATED: Wrap in a ZStack to set a global background
+        ZStack {
+            // Add the background image from your Assets
+            Image("Background")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+
+            // Your existing logic
+            Group {
+                if authViewModel.isAuthenticated {
+                    if let token = KeychainManager.shared.getToken() {
+                        GardenView(webSocketManager: WebSocketManager(token: token))
+                            .environmentObject(authViewModel)
+                    } else {
+                        // Fallback if token is missing
+                        Text("Error: No authentication token found")
+                            .foregroundColor(.red)
+                    }
                 } else {
-                    // Fallback if token is missing
-                    Text("Error: No authentication token found")
-                        .foregroundColor(.red)
+                    LoginView(authViewModel: authViewModel)
                 }
-            } else {
-                LoginView(authViewModel: authViewModel)
             }
         }
     }
